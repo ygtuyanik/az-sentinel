@@ -1,0 +1,152 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logAnalyticsWorkspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics (Sentinel) workspace tam resource ID. Workspace dağıtımdan önce mevcut olmalı; hesabın workspace RG (örn. cwrg01) ve workspace üzerinde Contributor/Log Analytics Contributor yetkisi olmalı. Portal: workspace → Properties → Resource ID.",
+        "displayName": "Log Analytics Workspace Resource ID"
+      }
+    },
+    "dataCollectionEndpointName": {
+      "type": "string",
+      "defaultValue": "dce-dhcp-audit",
+      "metadata": {
+        "description": "Data Collection Endpoint adı",
+        "displayName": "Data Collection Endpoint adı"
+      }
+    },
+    "dataCollectionRuleName": {
+      "type": "string",
+      "defaultValue": "dcr-dhcp-audit",
+      "metadata": {
+        "description": "Data Collection Rule adı",
+        "displayName": "Data Collection Rule adı"
+      }
+    }
+  },
+  "variables": {
+    "streamName": "Custom-DHCPAuditLog_CL",
+    "workspaceResourceId": "[parameters('logAnalyticsWorkspaceResourceId')]",
+    "workspaceResourceGroup": "[split(parameters('logAnalyticsWorkspaceResourceId'), '/')[4]]",
+    "workspaceName": "[split(parameters('logAnalyticsWorkspaceResourceId'), '/')[8]]",
+    "tableFullName": "[concat(split(parameters('logAnalyticsWorkspaceResourceId'), '/')[8], '/DHCPAuditLog_CL')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionEndpoints",
+      "apiVersion": "2021-04-01",
+      "name": "[parameters('dataCollectionEndpointName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "Windows",
+      "properties": {
+        "networkAcls": {
+          "publicNetworkAccess": "Enabled"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2022-06-01",
+      "name": "[parameters('dataCollectionRuleName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "Windows",
+      "properties": {
+        "description": "DHCP Server audit loglarını Arc-enabled sunuculardan toplar ve Sentinel/Log Analytics'e gönderir.",
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]",
+        "streamDeclarations": {
+          "Custom-DHCPAuditLog_CL": {
+            "columns": [
+              { "name": "TimeGenerated", "type": "datetime" },
+              { "name": "Computer", "type": "string" },
+              { "name": "RawData", "type": "string" }
+            ]
+          }
+        },
+        "dataSources": {
+          "logFiles": [
+            {
+              "name": "DhcpAuditLogs",
+              "streams": [ "Custom-DHCPAuditLog_CL" ],
+              "filePatterns": [
+                "C:\\Windows\\System32\\dhcp\\DhcpSrvLog-*.log",
+                "C:\\Windows\\System32\\dhcp\\DhcpV6SrvLog-*.log"
+              ],
+              "format": "text",
+              "settings": {
+                "text": {
+                  "recordStartTimestampFormat": "ISO 8601"
+                }
+              }
+            }
+          ]
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "name": "SentinelWorkspace",
+              "workspaceResourceId": "[variables('workspaceResourceId')]"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [ "Custom-DHCPAuditLog_CL" ],
+            "destinations": [ "SentinelWorkspace" ],
+            "transformKql": "source | where isnotempty(RawData) and RawData !startswith('ID,') | extend parsed = split(RawData, ',') | extend EventId = iff(array_length(parsed) > 0, tostring(parsed[0]), ''), LogDate = iff(array_length(parsed) > 1, tostring(parsed[1]), ''), LogTime = iff(array_length(parsed) > 2, tostring(parsed[2]), ''), Description = iff(array_length(parsed) > 3, tostring(parsed[3]), ''), IpAddress = iff(array_length(parsed) > 4, tostring(parsed[4]), ''), HostName = iff(array_length(parsed) > 5, tostring(parsed[5]), ''), MacAddress = iff(array_length(parsed) > 6, tostring(parsed[6]), '') | project TimeGenerated, Computer, EventId, LogDate, LogTime, Description, IpAddress, HostName, MacAddress, RawData",
+            "outputStream": "Custom-DHCPAuditLog_CL"
+          },
+          {
+            "streams": [ "Custom-DHCPAuditLog_CL" ],
+            "destinations": [ "SentinelWorkspace" ],
+            "transformKql": "source | where isnotempty(RawData) and RawData !startswith('ID,') | extend parsed = split(RawData, ',') | extend LogDate = iff(array_length(parsed) > 1, tostring(parsed[1]), ''), LogTime = iff(array_length(parsed) > 2, tostring(parsed[2]), ''), Description = iff(array_length(parsed) > 3, tostring(parsed[3]), ''), IpAddress = iff(array_length(parsed) > 4, tostring(parsed[4]), ''), HostName = iff(array_length(parsed) > 5, tostring(parsed[5]), ''), MacRaw = iff(array_length(parsed) > 6, tostring(parsed[6]), ''), TxnId = iff(array_length(parsed) > 8, tostring(parsed[8]), '') | extend EventStartTime = case(LogDate != '' and LogTime != '' and array_length(split(LogDate, '/')) >= 3, todatetime(strcat(tostring(split(LogDate, '/')[0]), '-', tostring(split(LogDate, '/')[1]), '-', tostring(split(LogDate, '/')[2]), ' ', LogTime)), TimeGenerated), EventType = case(Description startswith 'Assign' or Description contains 'Lease', 'Assign', Description startswith 'Renew', 'Renew', Description startswith 'Release', 'Release', Description contains 'DNS', 'DNS Update', 'Assign'), SrcMacAddr = iff(strlen(MacRaw) >= 12, strcat(substring(MacRaw, 0, 2), ':', substring(MacRaw, 2, 2), ':', substring(MacRaw, 4, 2), ':', substring(MacRaw, 6, 2), ':', substring(MacRaw, 8, 2), ':', substring(MacRaw, 10, 2)), MacRaw) | project TimeGenerated = EventStartTime, EventStartTime, EventEndTime = EventStartTime, EventType, EventResult = 'Success', EventProduct = 'Windows DHCP Server', EventVendor = 'Microsoft', EventSchema = 'DhcpEvent', EventSchemaVersion = '0.1', EventCount = toint(1), DvcHostname = Computer, SrcIpAddr = IpAddress, SrcHostname = iff(HostName != '', HostName, IpAddress), SrcMacAddr, DhcpSessionId = TxnId",
+            "outputStream": "Microsoft-ASimDhcpEventLogs"
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "dataCollectionEndpointId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]"
+    },
+    "dataCollectionRuleId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+    },
+    "debugInfo": {
+      "type": "object",
+      "value": {
+        "workspaceName": "[variables('workspaceName')]",
+        "workspaceResourceGroup": "[variables('workspaceResourceGroup')]",
+        "tableFullName": "[variables('tableFullName')]",
+        "workspaceResourceId": "[variables('workspaceResourceId')]",
+        "streamName": "[variables('streamName')]",
+        "logAnalyticsWorkspaceResourceId": "[parameters('logAnalyticsWorkspaceResourceId')]",
+        "dataCollectionEndpointName": "[parameters('dataCollectionEndpointName')]",
+        "dataCollectionRuleName": "[parameters('dataCollectionRuleName')]"
+      }
+    },
+    "workspaceName": {
+      "type": "string",
+      "value": "[variables('workspaceName')]"
+    },
+    "workspaceResourceGroup": {
+      "type": "string",
+      "value": "[variables('workspaceResourceGroup')]"
+    },
+    "tableFullName": {
+      "type": "string",
+      "value": "[variables('tableFullName')]"
+    },
+    "workspaceResourceId": {
+      "type": "string",
+      "value": "[variables('workspaceResourceId')]"
+    }
+  }
+}
