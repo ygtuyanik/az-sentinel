@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "<Storage account connection string>",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "WorkspaceID": "<Log Analytics Workspace ID>",
+    "WorkspaceKey": "<Log Analytics primary or secondary key>",
+    "ImpervaAPIID": "<Imperva API ID>",
+    "ImpervaAPIKey": "<Imperva API Key>",
+    "ImpervaLogServerURI": "https://<your-imperva-log-server>"
+  }
+}
