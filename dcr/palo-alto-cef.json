@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "dcrName": {
+      "type": "string",
+      "defaultValue": "DCR-PALOALTO-CEF",
+      "metadata": {
+        "description": "Name of the Data Collection Rule"
+      }
+    },
+    "logAnalyticsWorkspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Log Analytics workspace (e.g., /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName})"
+      }
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace ID (GUID)"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "createdBy": "Sentinel",
+        "source": "Palo Alto PAN-OS"
+      },
+      "metadata": {
+        "description": "Tags for the Data Collection Rule"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2024-03-11",
+      "name": "[parameters('dcrName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "Linux",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "dataSources": {
+          "syslog": [
+            {
+              "streams": ["Microsoft-CommonSecurityLog"],
+              "facilityNames": ["*"],
+              "logLevels": ["*"],
+              "name": "CEFStream1"
+            }
+          ]
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "workspaceResourceId": "[parameters('logAnalyticsWorkspaceResourceId')]",
+              "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+              "name": "DataCollectionEvent"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": ["Microsoft-CommonSecurityLog"],
+            "destinations": ["DataCollectionEvent"],
+            "transformKql": "source | where ProcessName == \"CEF\" | where not ((DeviceVendor == \"Palo Alto Networks\" and DeviceProduct == \"PAN-OS\" and Activity == 'TRAFFIC' and DestinationPort == 53) or (DeviceVendor == \"Palo Alto Networks\" and DeviceProduct == \"PAN-OS\" and Activity == 'TRAFFIC' and (DeviceAction == 'drop' or DeviceEventClassID == 'drop')) or (DeviceVendor == \"Palo Alto Networks\" and DeviceProduct == \"PAN-OS\" and Activity == 'TRAFFIC' and (DeviceAction == 'deny' or DeviceEventClassID =='deny'))) | extend AdditionalExtensions = iff((DeviceVendor == \"Palo Alto Networks\" and DeviceProduct == \"PAN-OS\"), (strcat(\"PanOSPacketsReceived=\", extract(@\"PanOSPacketsReceived=([^;]+)\", 1, AdditionalExtensions), \";\", \"PanOSPacketsSent=\", extract(@\"PanOSPacketsSent=([^;]+)\", 1, AdditionalExtensions), \";\", \"start=\", extract(@\"start=([^;]+)\", 1, AdditionalExtensions), \";\", \"PanOSRuleUUID=\", extract(@\"PanOSRuleUUID=([^;]+)\", 1, AdditionalExtensions))), AdditionalExtensions) | project TimeGenerated, TenantId, SourceSystem, Activity, AdditionalExtensions, ApplicationProtocol, CollectorHostName, CommunicationDirection, Computer, DestinationDnsDomain, DestinationHostName, DestinationIP, DestinationPort, DestinationUserID, DestinationUserName, DeviceAction, DeviceAddress, DeviceCustomString1, DeviceCustomString2, DeviceCustomString4, DeviceCustomString6, DeviceEventClassID, DeviceName, DeviceProduct, DeviceVendor, EndTime, EventCount, FileHash, FileName, FilePath, FlexString1, IndicatorThreatType, LogSeverity, MaliciousIPCountry, Message, ProcessName, Protocol, Reason, ReceiptTime, RemoteIP, RemotePort, RequestClientApplication, RequestMethod, RequestURL, SimplifiedDeviceAction, SourceHostName, SourceIP, SourcePort, SourceUserID, SourceUserName, StartTime, MaliciousIP, ThreatSeverity, MaliciousIPLatitude, MaliciousIPLongitude, ThreatDescription, ThreatConfidence, DeviceCustomDate1, DeviceCustomDate1Label, DeviceCustomDate2, DeviceCustomDate2Label, DeviceVersion, DeviceExternalID, DeviceInboundInterface, DeviceOutboundInterface, DeviceEventCategory, ReportReferenceLink",
+            "outputStream": "Microsoft-CommonSecurityLog"
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "dcrResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dcrName'))]"
+    },
+    "dcrName": {
+      "type": "string",
+      "value": "[parameters('dcrName')]"
+    },
+    "dcrImmutableId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dcrName'))).immutableId]"
+    }
+  }
+}
