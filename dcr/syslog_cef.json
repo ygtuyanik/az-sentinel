@@ -9,13 +9,6 @@
         "description": "Name of the Data Collection Rule"
       }
     },
-    "region": {
-      "type": "string",
-      "defaultValue": "eastus2",
-      "metadata": {
-        "description": "Azure region for the Data Collection Rule"
-      }
-    },
     "logAnalyticsWorkspaceResourceId": {
       "type": "string",
       "metadata": {
@@ -44,7 +37,7 @@
       "type": "Microsoft.Insights/dataCollectionRules",
       "apiVersion": "2024-03-11",
       "name": "[parameters('dcrName')]",
-      "location": "[parameters('region')]",
+      "location": "[reference(parameters('logAnalyticsWorkspaceResourceId'), '2021-06-01', 'Full').location]",
       "kind": "Linux",
       "tags": "[parameters('tags')]",
       "properties": {
