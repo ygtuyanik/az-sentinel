@@ -6,7 +6,7 @@
       "value": "ImpervaWAF"
     },
     "LogAnalyticsWorkspaceResourceID": {
-      "value": "/subscriptions/03c1c554-a773-4786-b350-fbbbf8dcc834/resourcegroups/cwrg01/providers/microsoft.operationalinsights/workspaces/cwlaw01"
+      "value": "/subscriptions/<subscription-id>/resourcegroups/<resource-group>/providers/microsoft.operationalinsights/workspaces/<workspace-name>"
     },
     "DCEName": {
       "value": "dce-imperva-waf"
@@ -21,13 +21,13 @@
       "value": "Microsoft-CommonSecurityLog"
     },
     "ImpervaAPIID": {
-      "value": "87930215745451"
+      "value": "<imperva-api-id>"
     },
     "ImpervaAPIKey": {
-      "value": "e0fd734d-b96f-4046-9517-8dfd192cb5a6"
+      "value": "<imperva-api-key>"
     },
     "ImpervaLogServerURI": {
-      "value": "https://logs1.incapsula.com/2552494821787_1919631/"
+      "value": "<imperva-log-server-uri>"
     }
   }
 }
