@@ -32,12 +32,15 @@
       }
     }
   },
+  "variables": {
+    "workspaceLocation": "[reference(parameters('logAnalyticsWorkspaceResourceId'), '2021-06-01', 'Full').location]"
+  },
   "resources": [
     {
       "type": "Microsoft.Insights/dataCollectionRules",
       "apiVersion": "2024-03-11",
       "name": "[parameters('dcrName')]",
-      "location": "[reference(parameters('logAnalyticsWorkspaceResourceId'), '2021-06-01', 'Full').location]",
+      "location": "[variables('workspaceLocation')]",
       "kind": "Linux",
       "tags": "[parameters('tags')]",
       "properties": {
