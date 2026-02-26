@@ -1,0 +1,61 @@
+// Application Insights'ta Function App loglarını kontrol etmek için KQL sorguları
+
+// 1. Function App'in çalışıp çalışmadığını kontrol et
+traces
+| where timestamp > ago(24h)
+| where message contains "Starting program" or message contains "timer" or message contains "Imperva"
+| project timestamp, message, severityLevel
+| order by timestamp desc
+
+// 2. Timer trigger'ın tetiklenip tetiklenmediğini kontrol et
+traces
+| where timestamp > ago(24h)
+| where message contains "timer" or message contains "past due"
+| project timestamp, message, severityLevel
+| order by timestamp desc
+
+// 3. Function App'in hata mesajlarını kontrol et
+traces
+| where timestamp > ago(24h)
+| where severityLevel >= 3  // Error ve üzeri
+| project timestamp, message, severityLevel
+| order by timestamp desc
+
+// 4. Ingestion API ile ilgili logları kontrol et
+traces
+| where timestamp > ago(24h)
+| where message contains "Ingestion API" or message contains "DCE" or message contains "DCR"
+| project timestamp, message, severityLevel
+| order by timestamp desc
+
+// 5. Imperva API'den veri çekme işlemlerini kontrol et
+traces
+| where timestamp > ago(24h)
+| where message contains "Downloading file" or message contains "Successfully downloaded" or message contains "chunk"
+| project timestamp, message, severityLevel
+| order by timestamp desc
+
+// 6. Tüm Function App loglarını göster (son 24 saat)
+traces
+| where timestamp > ago(24h)
+| where cloud_RoleName == "ImpervaWAF" or cloud_RoleName contains "Imperva"
+| project timestamp, message, severityLevel, customDimensions
+| order by timestamp desc
+| take 100
+
+// 7. Exception ve hata detaylarını göster
+exceptions
+| where timestamp > ago(24h)
+| where cloud_RoleName == "ImpervaWAF" or cloud_RoleName contains "Imperva"
+| project timestamp, type, message, outerMessage, details, problemId
+| order by timestamp desc
+| take 50
+
+// 8. Function execution hatalarını göster
+traces
+| where timestamp > ago(24h)
+| where message contains "Failed" or message contains "Error" or message contains "Exception"
+| where cloud_RoleName == "ImpervaWAF" or cloud_RoleName contains "Imperva"
+| project timestamp, message, severityLevel, customDimensions
+| order by timestamp desc
+| take 50

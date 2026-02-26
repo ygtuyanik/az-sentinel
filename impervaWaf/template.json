@@ -1,0 +1,338 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "FunctionName": {
+            "defaultValue": "ImpervaWAF",
+            "minLength": 1,
+            "maxLength": 11,
+            "type": "string"
+        },
+        "LogAnalyticsWorkspaceResourceID": {
+            "type": "string",
+            "metadata": {
+                "description": "Log Analytics (Sentinel) workspace tam resource ID. Format: '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}'"
+            }
+        },
+        "DCEName": {
+            "type": "string",
+            "defaultValue": "[concat('dce-', toLower(parameters('FunctionName')))]",
+            "metadata": {
+                "description": "Data Collection Endpoint adı"
+            }
+        },
+        "DCRName": {
+            "type": "string",
+            "defaultValue": "[concat('dcr-', toLower(parameters('FunctionName')))]",
+            "metadata": {
+                "description": "Data Collection Rule adı"
+            }
+        },
+        "DCRStreamName": {
+            "type": "string",
+            "defaultValue": "Custom-ImpervaWAFCloud_CL",
+            "metadata": {
+                "description": "Data Collection Rule custom stream adı (Custom- ile başlamalı)"
+            }
+        },
+        "OutputStreamName": {
+            "type": "string",
+            "defaultValue": "Microsoft-CommonSecurityLog",
+            "metadata": {
+                "description": "Output stream adı (CommonSecurityLog tablosuna göndermek için)"
+            }
+        },
+        "ImpervaAPIID": {
+            "type": "string",
+            "defaultValue": "<ImpervaAPIID>"
+        },
+        "ImpervaAPIKey": {
+            "type": "securestring",
+            "defaultValue": "<ImpervaAPIKey>"
+        },
+        "ImpervaLogServerURI": {
+            "type": "string",
+            "defaultValue": "<ImpervaLogServerURI>"
+        }
+    },
+    "variables": {
+        "FunctionName": "[concat(toLower(parameters('FunctionName')), uniqueString(resourceGroup().id))]",
+        "StorageSuffix": "[environment().suffixes.storage]",
+        "DCEName": "[parameters('DCEName')]",
+        "DCRName": "[parameters('DCRName')]",
+        "DCRStreamName": "[parameters('DCRStreamName')]",
+        "OutputStreamName": "[parameters('OutputStreamName')]",
+        "WorkspaceResourceId": "[parameters('LogAnalyticsWorkspaceResourceID')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Insights/components",
+            "apiVersion": "2020-02-02",
+            "name": "[variables('FunctionName')]",
+            "location": "[resourceGroup().location]",
+            "kind": "web",
+            "properties": {
+                "Application_Type": "web",
+                "ApplicationId": "[variables('FunctionName')]",
+                "WorkspaceResourceId": "[parameters('LogAnalyticsWorkspaceResourceID')]"
+            }
+        },
+        {
+            "type": "Microsoft.Insights/dataCollectionEndpoints",
+            "apiVersion": "2021-04-01",
+            "name": "[variables('DCEName')]",
+            "location": "[resourceGroup().location]",
+            "kind": "Direct",
+            "properties": {
+                "networkAcls": {
+                    "publicNetworkAccess": "Enabled"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Insights/dataCollectionRules",
+            "apiVersion": "2022-06-01",
+            "name": "[variables('DCRName')]",
+            "location": "[resourceGroup().location]",
+            "kind": "Direct",
+            "properties": {
+                "description": "Imperva WAF Cloud loglarını Azure Sentinel'e gönderir",
+                "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('DCEName'))]",
+                "streamDeclarations": {
+                    "[variables('DCRStreamName')]": {
+                        "columns": [
+                            { "name": "EventGeneratedTime", "type": "string" },
+                            { "name": "start", "type": "string" },
+                            { "name": "EventVendor", "type": "string" },
+                            { "name": "EventProduct", "type": "string" },
+                            { "name": "Device Version", "type": "string" },
+                            { "name": "Signature", "type": "string" },
+                            { "name": "Attack Name", "type": "string" },
+                            { "name": "Attack Severity", "type": "string" },
+                            { "name": "src", "type": "string" },
+                            { "name": "dst", "type": "string" },
+                            { "name": "spt", "type": "string" },
+                            { "name": "dpt", "type": "string" },
+                            { "name": "proto", "type": "string" },
+                            { "name": "requestMethod", "type": "string" },
+                            { "name": "request", "type": "string" },
+                            { "name": "msg", "type": "string" }
+                        ]
+                    }
+                },
+                "destinations": {
+                    "logAnalytics": [
+                        {
+                            "name": "SentinelWorkspace",
+                            "workspaceResourceId": "[variables('WorkspaceResourceId')]"
+                        }
+                    ]
+                },
+                "dataFlows": [
+                    {
+                        "streams": [ "[variables('DCRStreamName')]" ],
+                        "destinations": [ "SentinelWorkspace" ],
+                        "transformKql": "source | extend TimeGenerated = case(isnotempty(EventGeneratedTime) and EventGeneratedTime != '', todatetime(EventGeneratedTime), isnotempty(start) and start != '', todatetime(tolong(start) / 1000), now()), DeviceVendor = case(isnotempty(EventVendor), tostring(EventVendor), 'Imperva'), DeviceProduct = case(isnotempty(EventProduct), tostring(EventProduct), 'Incapsula'), DeviceVersion = tostring(['Device Version']), DeviceEventClassID = tostring(Signature), Activity = tostring(['Attack Name']), Severity = tostring(['Attack Severity']), SourceIP = tostring(src), DestinationIP = tostring(dst), SourcePort = case(isnotempty(spt) and spt != '', toint(spt), int(null)), DestinationPort = case(isnotempty(dpt) and dpt != '', toint(dpt), int(null)), Protocol = tostring(proto), RequestMethod = tostring(requestMethod), RequestURL = tostring(request), Message = tostring(msg) | project TimeGenerated, DeviceVendor, DeviceProduct, DeviceVersion, DeviceEventClassID, Activity, Severity, SourceIP, DestinationIP, SourcePort, DestinationPort, Protocol, RequestMethod, RequestURL, Message",
+                        "outputStream": "[variables('OutputStreamName')]"
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('DCEName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Authorization/roleAssignments",
+            "apiVersion": "2022-04-01",
+            "name": "[guid(resourceGroup().id, variables('FunctionName'), variables('DCRName'))]",
+            "scope": "[resourceId('Microsoft.Insights/dataCollectionRules', variables('DCRName'))]",
+            "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('FunctionName')), '2018-11-01', 'Full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('FunctionName'))]",
+                "[resourceId('Microsoft.Insights/dataCollectionRules', variables('DCRName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[tolower(variables('FunctionName'))]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "minimumTlsVersion": "TLS1_2"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('FunctionName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', tolower(variables('FunctionName')))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "enabled": false
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/fileServices",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('FunctionName'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', tolower(variables('FunctionName')))]"
+            ],
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2018-11-01",
+            "name": "[variables('FunctionName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', tolower(variables('FunctionName')))]",
+                "[resourceId('Microsoft.Insights/components', variables('FunctionName'))]"
+            ],
+            "kind": "functionapp,linux",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "name": "[variables('FunctionName')]",
+                "httpsOnly": true,
+                "clientAffinityEnabled": true,
+                "alwaysOn": true,
+                "reserved": true,
+                "siteConfig": {
+                    "linuxFxVersion": "python|3.12"
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2018-11-01",
+                    "type": "config",
+                    "name": "appsettings",
+                    "dependsOn": [
+                        "[concat('Microsoft.Web/sites/', variables('FunctionName'))]"
+                    ],
+                    "properties": {
+                        "FUNCTIONS_EXTENSION_VERSION": "~4",
+                        "FUNCTIONS_WORKER_RUNTIME": "python",
+                        "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.insights/components', variables('FunctionName')), '2015-05-01').InstrumentationKey]",
+                        "APPLICATIONINSIGHTS_CONNECTION_STRING": "[reference(resourceId('microsoft.insights/components', variables('FunctionName')), '2015-05-01').ConnectionString]",
+                        "AzureWebJobsStorage": "[concat('DefaultEndpointsProtocol=https;AccountName=', toLower(variables('FunctionName')),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', toLower(variables('FunctionName'))), '2019-06-01').keys[0].value, ';EndpointSuffix=',toLower(variables('StorageSuffix')))]",
+                        "ImpervaAPIID": "[parameters('ImpervaAPIID')]",
+                        "ImpervaAPIKey": "[parameters('ImpervaAPIKey')]",
+                        "ImpervaLogServerURI": "[parameters('ImpervaLogServerURI')]",
+                        "DCE_ENDPOINT": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('DCEName'))).logsIngestion.endpoint]",
+                        "DCR_IMMUTABLE_ID": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('DCRName'))).immutableId]",
+                        "DCR_STREAM_NAME": "[variables('DCRStreamName')]",
+                        "SCM_DO_BUILD_DURING_DEPLOYMENT": "true",
+                        "ENABLE_ORYX_BUILD": "true"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('FunctionName'), '/default/azure-webjobs-hosts')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('FunctionName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('FunctionName'))]"
+            ],
+            "properties": {
+                "publicAccess": "None"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('FunctionName'), '/default/azure-webjobs-secrets')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('FunctionName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('FunctionName'))]"
+            ],
+            "properties": {
+                "publicAccess": "None"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('FunctionName'), '/default/', tolower(variables('FunctionName')))]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/fileServices', variables('FunctionName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('FunctionName'))]"
+            ],
+            "properties": {
+                "shareQuota": 5120
+            }
+        }
+    ],
+    "outputs": {
+        "functionAppName": {
+            "type": "string",
+            "value": "[variables('FunctionName')]"
+        },
+        "dceEndpoint": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('DCEName'))).logsIngestion.endpoint]"
+        },
+        "dcrImmutableId": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('DCRName'))).immutableId]"
+        },
+        "dcrStreamName": {
+            "type": "string",
+            "value": "[variables('DCRStreamName')]"
+        },
+        "dcrResourceId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Insights/dataCollectionRules', variables('DCRName'))]"
+        }
+    }
+}

@@ -1,0 +1,8 @@
+# DO NOT include azure-functions-worker in this file
+# The Python Worker is managed by Azure Functions platform
+
+azure-functions
+requests
+azure-storage-file-share>=12.9.0
+azure-monitor-ingestion>=1.0.0
+azure-identity>=1.15.0

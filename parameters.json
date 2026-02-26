@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "FunctionName": {
+      "value": "ImpervaWAF"
+    },
+    "LogAnalyticsWorkspaceResourceID": {
+      "value": "/subscriptions/03c1c554-a773-4786-b350-fbbbf8dcc834/resourcegroups/cwrg01/providers/microsoft.operationalinsights/workspaces/cwlaw01"
+    },
+    "DCEName": {
+      "value": "dce-imperva-waf"
+    },
+    "DCRName": {
+      "value": "dcr-imperva-waf"
+    },
+    "DCRStreamName": {
+      "value": "Custom-ImpervaWAFCloud_CL"
+    },
+    "OutputStreamName": {
+      "value": "Microsoft-CommonSecurityLog"
+    },
+    "ImpervaAPIID": {
+      "value": "87930215745451"
+    },
+    "ImpervaAPIKey": {
+      "value": "e0fd734d-b96f-4046-9517-8dfd192cb5a6"
+    },
+    "ImpervaLogServerURI": {
+      "value": "https://logs1.incapsula.com/2552494821787_1919631/"
+    }
+  }
+}
