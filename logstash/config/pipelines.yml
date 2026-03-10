@@ -1,0 +1,7 @@
+- pipeline.id: cef
+  path.config: "/usr/share/logstash/pipeline/cef"
+  pipeline.workers: 2
+
+- pipeline.id: syslog
+  path.config: "/usr/share/logstash/pipeline/syslog"
+  pipeline.workers: 2

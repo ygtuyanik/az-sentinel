@@ -1,0 +1,6 @@
+http.host: "0.0.0.0"
+log.level: info
+xpack.monitoring.enabled: false
+pipeline.ordered: false
+# Logstash 8 için ECS devre dışı (plugin gerekliliği)
+pipeline.ecs_compatibility: disabled

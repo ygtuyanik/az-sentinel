@@ -1,0 +1,27 @@
+services:
+  logstash:
+    build: .
+    container_name: logstash
+    restart: unless-stopped
+    ports:
+      - "5514:5514/udp"   # Palo Alto CEF
+      - "5514:5514/tcp"
+      - "5515:5515/udp"   # Imperva CEF
+      - "5515:5515/tcp"
+      - "5516:5516/udp"   # General Syslog
+      - "5516:5516/tcp"
+      - "9600:9600"       # Logstash monitoring API
+    volumes:
+      - ./config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
+      - ./config/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro,Z
+      - ./pipelines:/usr/share/logstash/pipeline:ro,Z
+      - ./patterns:/usr/share/logstash/patterns:ro,Z
+    env_file:
+      - .env
+    environment:
+      - LS_JAVA_OPTS=-Xms512m -Xmx1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9600"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics Workspace resource ID. Portal: Workspace > Properties > Resource ID"
+      }
+    },
+    "workspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics Workspace GUID. Portal: Workspace > Properties > Workspace ID"
+      }
+    }
+  },
+  "variables": {
+    "workspaceName": "[last(split(parameters('workspaceResourceId'), '/'))]",
+    "dceName": "dce-logstash",
+    "dcrCefName": "dcr-logstash-cef",
+    "dcrSyslogName": "dcr-logstash-syslog"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionEndpoints",
+      "apiVersion": "2023-03-11",
+      "name": "[variables('dceName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "networkAcls": {
+          "publicNetworkAccess": "Enabled"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2023-03-11",
+      "name": "[variables('dcrCefName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]"
+      ],
+      "properties": {
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]",
+        "streamDeclarations": {
+          "Custom-CEFStream": {
+            "columns": [
+              { "name": "ls_timestamp",                "type": "datetime" },
+              { "name": "DeviceVendor",                "type": "string" },
+              { "name": "DeviceProduct",               "type": "string" },
+              { "name": "DeviceVersion",               "type": "string" },
+              { "name": "DeviceEventClassID",          "type": "string" },
+              { "name": "Activity",                    "type": "string" },
+              { "name": "LogSeverity",                 "type": "string" },
+              { "name": "SourceIP",                    "type": "string" },
+              { "name": "DestinationIP",               "type": "string" },
+              { "name": "SourcePort",                  "type": "int" },
+              { "name": "DestinationPort",             "type": "int" },
+              { "name": "Protocol",                    "type": "string" },
+              { "name": "DeviceAction",                "type": "string" },
+              { "name": "ApplicationProtocol",         "type": "string" },
+              { "name": "DeviceEventCategory",         "type": "string" },
+              { "name": "RequestURL",                  "type": "string" },
+              { "name": "RequestMethod",               "type": "string" },
+              { "name": "SourceUserID",                "type": "string" },
+              { "name": "SourceUserName",              "type": "string" },
+              { "name": "DestinationUserName",         "type": "string" },
+              { "name": "Message",                     "type": "string" },
+              { "name": "SourceHostName",              "type": "string" },
+              { "name": "DestinationHostName",         "type": "string" },
+              { "name": "DeviceCustomString1",         "type": "string" },
+              { "name": "DeviceCustomString1Label",    "type": "string" },
+              { "name": "DeviceCustomString2",         "type": "string" },
+              { "name": "DeviceCustomString2Label",    "type": "string" },
+              { "name": "DeviceCustomString3",         "type": "string" },
+              { "name": "DeviceCustomString3Label",    "type": "string" },
+              { "name": "DeviceCustomString4",         "type": "string" },
+              { "name": "DeviceCustomString4Label",    "type": "string" },
+              { "name": "DeviceCustomString5",         "type": "string" },
+              { "name": "DeviceCustomString5Label",    "type": "string" },
+              { "name": "DeviceCustomString6",         "type": "string" },
+              { "name": "DeviceCustomString6Label",    "type": "string" },
+              { "name": "DeviceCustomDate1",           "type": "string" },
+              { "name": "DeviceCustomDate1Label",      "type": "string" },
+              { "name": "FlexString1",                 "type": "string" },
+              { "name": "FlexString1Label",            "type": "string" },
+              { "name": "FlexString2",                 "type": "string" },
+              { "name": "FlexString2Label",            "type": "string" },
+              { "name": "FlexNumber1",                 "type": "int" },
+              { "name": "FlexNumber1Label",            "type": "string" },
+              { "name": "FileName",                    "type": "string" },
+              { "name": "SourceNTDomain",              "type": "string" },
+              { "name": "DestinationNTDomain",         "type": "string" },
+              { "name": "EventOutcome",                "type": "string" },
+              { "name": "Reason",                      "type": "string" },
+              { "name": "DeviceExternalID",            "type": "string" },
+              { "name": "DeviceInboundInterface",      "type": "string" },
+              { "name": "DeviceOutboundInterface",     "type": "string" },
+              { "name": "SourceTranslatedAddress",     "type": "string" },
+              { "name": "DestinationTranslatedAddress","type": "string" },
+              { "name": "SourceTranslatedPort",        "type": "int" },
+              { "name": "DestinationTranslatedPort",   "type": "int" },
+              { "name": "ReceivedBytes",               "type": "long" },
+              { "name": "SentBytes",                   "type": "long" },
+              { "name": "EventCount",                  "type": "int" }
+            ]
+          }
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "name": "[variables('workspaceName')]",
+              "workspaceResourceId": "[parameters('workspaceResourceId')]",
+              "workspaceId": "[parameters('workspaceId')]"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [ "Custom-CEFStream" ],
+            "destinations": [ "[variables('workspaceName')]" ],
+            "outputStream": "Microsoft-CommonSecurityLog",
+            "transformKql": "source | extend TimeGenerated = ls_timestamp"
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2023-03-11",
+      "name": "[variables('dcrSyslogName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]"
+      ],
+      "properties": {
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]",
+        "streamDeclarations": {
+          "Custom-SyslogStream": {
+            "columns": [
+              { "name": "ls_timestamp",  "type": "datetime" },
+              { "name": "SyslogMessage", "type": "string" },
+              { "name": "Computer",      "type": "string" },
+              { "name": "HostName",      "type": "string" },
+              { "name": "Facility",      "type": "string" },
+              { "name": "SeverityLevel", "type": "string" },
+              { "name": "ProcessName",   "type": "string" },
+              { "name": "ProcessID",     "type": "int" }
+            ]
+          }
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "name": "[variables('workspaceName')]",
+              "workspaceResourceId": "[parameters('workspaceResourceId')]",
+              "workspaceId": "[parameters('workspaceId')]"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [ "Custom-SyslogStream" ],
+            "destinations": [ "[variables('workspaceName')]" ],
+            "outputStream": "Microsoft-Syslog",
+            "transformKql": "source | extend TimeGenerated = ls_timestamp"
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "DCE_ENDPOINT": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))).logsIngestion.endpoint]"
+    },
+    "CEF_DCR_IMMUTABLE_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrCefName'))).immutableId]"
+    },
+    "SYSLOG_DCR_IMMUTABLE_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrSyslogName'))).immutableId]"
+    }
+  }
+}
