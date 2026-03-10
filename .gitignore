@@ -1,2 +1,5 @@
 CLAUDE.md
 logstash/.env
+logstash/*.dump
+logstash/*.log
+logstash/*.cef
